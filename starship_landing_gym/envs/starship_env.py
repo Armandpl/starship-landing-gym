@@ -37,13 +37,9 @@ class StarshipEnv(gym.GoalEnv):
              "achieved_goal": spaces.Box(low=-max_goal, high=max_goal),
              "desired_goal": spaces.Box(low=-max_goal, high=max_goal)})
 
-        # desired observation when the task is solved
-        goal = np.array([0, 0, self.dyn.length/2, 0, -1, 0, 0])
         tolerances = np.array([50, 4, 50, 4, 0.2, 0.2, np.deg2rad(20)])
         tolerances = tolerances/2
         self.tolerances = self._normalize_obs(tolerances)
-
-        self.goal = self._normalize_obs(goal)
 
     def compute_reward(self, achieved_goal: np.ndarray,
                        desired_goal: np.ndarray, info: dict):
@@ -84,7 +80,7 @@ class StarshipEnv(gym.GoalEnv):
         # if abs(x) > self.width:  # if rocket outside of scope
         #     done = True
 
-        self.renderer.update(self._state, a)
+        self.renderer.update(self._state, a, self.goal)
 
         rwd = self.compute_reward(obs["achieved_goal"],
                                   obs["desired_goal"], info)
@@ -108,6 +104,18 @@ class StarshipEnv(gym.GoalEnv):
             np.random.rand()*np.pi*2,  # start theta
             0,  # start theta speeed
         ])
+
+    def _init_goal(self):
+        goal = np.array([
+            np.random.randint(-self.width/2, self.width/2),  # start x pos
+            0,
+            self.dyn.length/2,
+            0,
+            -1,
+            0,
+            0
+        ])
+        self.goal = self._normalize_obs(goal)
 
     def _update_state(self, a):
         x_dot, x_dotdot, y_dot, y_dotdot, theta_dot, theta_dotdot = \
@@ -195,7 +203,6 @@ class StarshipRenderer:
         self._init_pad(100, 10)
         self._init_flame(5, 15)
         self._init_ship(dyn.width, dyn.length)
-        self.transforms["pad"].set_translation(width/2, 0)
 
     def _make_rectangle(self, width, height):
         lef, rig, top, bot = (
@@ -229,16 +236,18 @@ class StarshipRenderer:
         flame.add_attr(self.transforms["ship"])
         self.viewer.add_geom(flame)
 
-    def update(self, state, action):
+    def update(self, state, action, goal):
         """Updates the positions of the objects on screen"""
         thrust, thrust_angle = action
         ship_x, ship_y, ship_th = state[0], state[2], state[4]
+        goal_x, _, _, _, _, _, _ = goal
 
         self.transforms["ship"].set_translation(ship_x+self.width/2, ship_y)
         self.transforms["ship"].set_rotation(ship_th)
         self.transforms["flame"].set_rotation(thrust_angle)
         self.transforms["flame"].set_translation(0, self.dyn.length/2)
         self.transforms["flame"].set_scale(1, thrust)
+        self.transforms["pad"].set_translation(goal_x+self.width/2, 0)
 
     def render(self, *args, **kwargs):
         """Forwards the call to the underlying Viewer instance"""
