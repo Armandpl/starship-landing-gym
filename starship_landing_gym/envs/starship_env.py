@@ -138,6 +138,7 @@ class StarshipEnv(gym.GoalEnv):
 
     def reset(self):
         self._init_state()
+        self._init_goal()
         obs, _, _, _ = self.step(np.zeros(self.action_space.shape))
         return obs
 
