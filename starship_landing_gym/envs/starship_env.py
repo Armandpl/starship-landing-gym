@@ -30,33 +30,35 @@ class StarshipEnv(gym.GoalEnv):
         self.action_space = spaces.Box(low=-max_act, high=max_act)
 
         # TODO put the right values there
-        max_obs = np.array([np.inf]*7)
+        max_obs = np.array([np.inf]*7*2)
+        max_goal = np.array([np.inf]*7)
         self.observation_space = spaces.Dict(
             {"observation": spaces.Box(low=-max_obs, high=max_obs),
-             "achieved_goal": spaces.Box(low=-max_obs, high=max_obs),
-             "desired_goal": spaces.Box(low=-max_obs, high=max_obs)})
+             "achieved_goal": spaces.Box(low=-max_goal, high=max_goal),
+             "desired_goal": spaces.Box(low=-max_goal, high=max_goal)})
 
         # desired observation when the task is solved
         goal = np.array([0, 0, self.dyn.length/2, 0, -1, 0, 0])
+        tolerances = np.array([50, 4, 50, 4, 0.2, 0.2, np.deg2rad(20)])
+        tolerances = tolerances/2
+        self.tolerances = self._normalize_obs(tolerances)
+
         self.goal = self._normalize_obs(goal)
 
     def compute_reward(self, achieved_goal: np.ndarray,
-                       desired_goal: np.ndarray, info: dict,
-                       p: float = 0.5) -> float:
+                       desired_goal: np.ndarray, info: dict):
         """
-        Proximity to the goal is rewarded
-        We use a weighted p-norm
-        :param achieved_goal: the goal that was achieved
-        :param desired_goal: the goal that was desired
-        :param dict info: any supplementary information
-        :param p: the Lp^p norm used in the reward.
-        Use p<1 to have high kurtosis for rewards in [0, 1]
-        :return: the corresponding reward
+            Binary reward: -1 if not achieved, 1 if achieved
         """
-        # reward_w = [1, 0.3, 0, 0, 0.02, 0.02]
-        reward_w = [1, 1, 1, 1, 1, 1, 1]
-        return -np.power(np.dot(np.abs(achieved_goal - desired_goal),
-                         np.array(reward_w)), p)
+        upper_goal_limit = desired_goal + self.tolerances
+        lower_goal_limit = desired_goal - self.tolerances
+        achieved_in_tolerances = (achieved_goal > lower_goal_limit) \
+            & (achieved_goal < upper_goal_limit)
+        goal_achieved = np.sum(achieved_in_tolerances, axis=-1)
+        # TODO make 7 the goal shape
+        reward = (goal_achieved == 7) * 2.0 - 1
+
+        return reward
 
     def step(self, a):
         # TODO: check better way of doing this
@@ -70,16 +72,17 @@ class StarshipEnv(gym.GoalEnv):
 
         obs = {}
         curr_obs = self._get_obs()
-        obs["observation"] = curr_obs
+        distance_to_goal = self.goal - curr_obs
+        obs["observation"] = np.concatenate((curr_obs, distance_to_goal))
         obs["desired_goal"] = self.goal
         obs["achieved_goal"] = curr_obs
 
         done = False
-        x, _, y, _, _, _ = self._state
-        if y-self.dyn.length <= 0:  # if at ground level
-            done = True
-        if abs(x) > self.width:  # if rocket outside of scope
-            done = True
+        # x, _, y, _, _, _ = self._state
+        # if y-self.dyn.length <= 0:  # if at ground level
+        #     done = True
+        # if abs(x) > self.width:  # if rocket outside of scope
+        #     done = True
 
         self.renderer.update(self._state, a)
 
@@ -127,7 +130,8 @@ class StarshipEnv(gym.GoalEnv):
 
     def reset(self):
         self._init_state()
-        return self.step(np.zeros(self.action_space.shape))[0]
+        obs, _, _, _ = self.step(np.zeros(self.action_space.shape))
+        return obs
 
 
 class StarshipDynamics:
