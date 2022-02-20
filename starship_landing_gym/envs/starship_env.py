@@ -24,39 +24,52 @@ class StarshipEnv(gym.GoalEnv):
         self.dyn = StarshipDynamics()
         self.renderer = StarshipRenderer(self.dyn, self.width*2, self.drop_h)
 
-        self.norm_obs = np.array([self.width, 10, self.drop_h, 10, 1, 1, 10])
+        # self.norm_obs = np.array([self.width, 10, self.drop_h, 10, 1, 1, 10])
 
         max_act = np.array([1, 1])
         self.action_space = spaces.Box(low=-max_act, high=max_act)
 
         # TODO put the right values there
-        max_obs = np.array([np.inf]*7)
+        # + make the self.max/min goal easier to read
+        max_obs = np.array([np.inf]*7*2)
+        self.max_goal = np.array([self.width, 200, self.drop_h, 200,
+                                  1, 1, 20*np.pi*2])
+        max_goal = self._normalize_obs(self.max_goal)
+        min_goal = np.array([-self.width, -200, 0, -200, -1, -1, -20*np.pi*2])
+        min_goal = self._normalize_obs(min_goal)
         self.observation_space = spaces.Dict(
             {"observation": spaces.Box(low=-max_obs, high=max_obs),
-             "achieved_goal": spaces.Box(low=-max_obs, high=max_obs),
-             "desired_goal": spaces.Box(low=-max_obs, high=max_obs)})
+             "achieved_goal": spaces.Box(low=min_goal, high=max_goal),
+             "desired_goal": spaces.Box(low=min_goal, high=max_goal)})
 
-        # desired observation when the task is solved
-        goal = np.array([0, 0, self.dyn.length/2, 0, -1, 0, 0])
-        self.goal = self._normalize_obs(goal)
+        # tolerances = np.array([50, 4, 50, 4, 0.2, 0.2, np.deg2rad(20)])
+        tolerances = np.array([50, np.inf, 50, np.inf, np.inf, np.inf, np.inf])
+        tolerances = tolerances/2
+        self.tolerances = self._normalize_obs(tolerances)
 
     def compute_reward(self, achieved_goal: np.ndarray,
-                       desired_goal: np.ndarray, info: dict,
-                       p: float = 0.5) -> float:
+                       desired_goal: np.ndarray, info: dict):
         """
-        Proximity to the goal is rewarded
-        We use a weighted p-norm
-        :param achieved_goal: the goal that was achieved
-        :param desired_goal: the goal that was desired
-        :param dict info: any supplementary information
-        :param p: the Lp^p norm used in the reward.
-        Use p<1 to have high kurtosis for rewards in [0, 1]
-        :return: the corresponding reward
+            Binary reward: -1 if not achieved, 1 if achieved
         """
-        # reward_w = [1, 0.3, 0, 0, 0.02, 0.02]
-        reward_w = [1, 1, 1, 1, 1, 1, 1]
-        return -np.power(np.dot(np.abs(achieved_goal - desired_goal),
-                         np.array(reward_w)), p)
+        upper_goal_limit = desired_goal + self.tolerances
+        lower_goal_limit = desired_goal - self.tolerances
+        achieved_in_tolerances = (achieved_goal > lower_goal_limit) \
+            & (achieved_goal < upper_goal_limit)
+        goal_achieved = np.sum(achieved_in_tolerances, axis=-1)
+        # TODO make 7 the goal shape
+        reward = (goal_achieved == 7) * 201.0 - 1
+
+        # if achieved_goal.shape[0] != 7:
+        #     reward = np.array([not self.observation_space.contains(g) * -50
+        #     if r != 200 else r for g, r in zip(achieved_goal, reward)])
+        # else:
+        # outside of obs space = crashed
+        #     if not self.observation_space["achieved_goal"]\
+        #         .contains(achieved_goal) and reward != 200:
+        #         reward = -50
+
+        return reward
 
     def step(self, a):
         # TODO: check better way of doing this
@@ -70,18 +83,14 @@ class StarshipEnv(gym.GoalEnv):
 
         obs = {}
         curr_obs = self._get_obs()
-        obs["observation"] = curr_obs
+        distance_to_goal = self.goal - curr_obs
+        obs["observation"] = np.concatenate((curr_obs, distance_to_goal))
         obs["desired_goal"] = self.goal
         obs["achieved_goal"] = curr_obs
 
-        done = False
-        x, _, y, _, _, _ = self._state
-        if y-self.dyn.length <= 0:  # if at ground level
-            done = True
-        if abs(x) > self.width:  # if rocket outside of scope
-            done = True
+        done = not self.observation_space["achieved_goal"].contains(curr_obs)
 
-        self.renderer.update(self._state, a)
+        self.renderer.update(self._state, a, self.goal_no_norm)
 
         rwd = self.compute_reward(obs["achieved_goal"],
                                   obs["desired_goal"], info)
@@ -89,7 +98,7 @@ class StarshipEnv(gym.GoalEnv):
         return obs, rwd, done, info
 
     def _normalize_obs(self, obs):
-        return obs/self.norm_obs
+        return obs/self.max_goal
 
     def _get_obs(self):
         x, x_dot, y, y_dot, th, th_dot = self._state
@@ -105,6 +114,19 @@ class StarshipEnv(gym.GoalEnv):
             np.random.rand()*np.pi*2,  # start theta
             0,  # start theta speeed
         ])
+
+    def _init_goal(self):
+        goal = np.array([
+            np.random.randint(-self.width/2, self.width/2),  # start x pos
+            0,
+            self.dyn.length/2,
+            0,
+            -1,
+            0,
+            0
+        ])
+        self.goal = self._normalize_obs(goal)
+        self.goal_no_norm = goal
 
     def _update_state(self, a):
         x_dot, x_dotdot, y_dot, y_dotdot, theta_dot, theta_dotdot = \
@@ -127,7 +149,9 @@ class StarshipEnv(gym.GoalEnv):
 
     def reset(self):
         self._init_state()
-        return self.step(np.zeros(self.action_space.shape))[0]
+        self._init_goal()
+        obs, _, _, _ = self.step(np.zeros(self.action_space.shape))
+        return obs
 
 
 class StarshipDynamics:
@@ -151,6 +175,7 @@ class StarshipDynamics:
             thrust should be between 0 and 1  TODO replace by assert?
             thrust angle should be between -1 and 1
         """
+        # TODO only fetch and return useful values (here theta)
         x, x_dot, y, y_dot, theta, theta_dot = s
         thrust, thrust_angle = u[0], u[1]
 
@@ -191,7 +216,6 @@ class StarshipRenderer:
         self._init_pad(100, 10)
         self._init_flame(5, 15)
         self._init_ship(dyn.width, dyn.length)
-        self.transforms["pad"].set_translation(width/2, 0)
 
     def _make_rectangle(self, width, height):
         lef, rig, top, bot = (
@@ -225,16 +249,18 @@ class StarshipRenderer:
         flame.add_attr(self.transforms["ship"])
         self.viewer.add_geom(flame)
 
-    def update(self, state, action):
+    def update(self, state, action, goal):
         """Updates the positions of the objects on screen"""
         thrust, thrust_angle = action
         ship_x, ship_y, ship_th = state[0], state[2], state[4]
+        goal_x, _, _, _, _, _, _ = goal
 
         self.transforms["ship"].set_translation(ship_x+self.width/2, ship_y)
         self.transforms["ship"].set_rotation(ship_th)
         self.transforms["flame"].set_rotation(thrust_angle)
         self.transforms["flame"].set_translation(0, self.dyn.length/2)
         self.transforms["flame"].set_scale(1, thrust)
+        self.transforms["pad"].set_translation(goal_x+self.width/2, 0)
 
     def render(self, *args, **kwargs):
         """Forwards the call to the underlying Viewer instance"""

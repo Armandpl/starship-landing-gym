@@ -1,9 +1,11 @@
 import gym
+from gym.wrappers import TimeLimit
 import pyvirtualdisplay
-from stable_baselines3 import SAC, HerReplayBuffer
+from stable_baselines3 import HerReplayBuffer, SAC
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecVideoRecorder
 from stable_baselines3.common.env_checker import check_env
+from sb3_contrib.common.wrappers import TimeFeatureWrapper
 from wandb.integration.sb3 import WandbCallback
 import wandb
 
@@ -19,7 +21,8 @@ if __name__ == "__main__":
         "goal_selection_strategy": 'episode',
         "online_sampling": False,
         "max_episode_length": 400,
-        "batch_size": 256
+        "batch_size": 256,
+        "her_k": 4
     }
 
     run = wandb.init(
@@ -35,28 +38,33 @@ if __name__ == "__main__":
     def make_env():
         env = gym.make(config["env_name"])
         check_env(env)
+        env = TimeLimit(env, config["max_episode_length"])
+        env = TimeFeatureWrapper(env, config["max_episode_length"])
         env = Monitor(env)  # record stats such as returns
         return env
 
     env = DummyVecEnv([make_env])
     env = VecVideoRecorder(env, f"videos/{run.id}",
-                           record_video_trigger=lambda x: x % 2000 == 0,
+                           record_video_trigger=lambda x: x % 4000 == 0,
                            video_length=400)
 
     model = SAC(
         config["policy_type"],
         env,
         replay_buffer_class=HerReplayBuffer,
-        batch_size=config["batch_size"],
-        # Parameters for HER
         replay_buffer_kwargs=dict(
-            n_sampled_goal=5,
+            n_sampled_goal=config["her_k"],
             goal_selection_strategy=config["goal_selection_strategy"],
             online_sampling=config["online_sampling"],
             max_episode_length=config["max_episode_length"],
+            handle_timeout_termination=False
         ),
-        verbose=1,
-        tensorboard_log=f"runs/{run.id}"
+        batch_size=config["batch_size"],
+        # buffer_size=int(1e6),
+        # gamma=0.95, batch_size=1024, tau=0.05,
+        # policy_kwargs=dict(net_arch=[512, 512, 512]),
+        tensorboard_log=f"runs/{run.id}",
+        verbose=1
     )
 
     model.learn(
