@@ -1,11 +1,10 @@
 import gym
 from gym.wrappers import TimeLimit
-from stable_baselines3 import HerReplayBuffer
+from stable_baselines3 import HerReplayBuffer, SAC
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecVideoRecorder
 from stable_baselines3.common.env_checker import check_env
 from sb3_contrib.common.wrappers import TimeFeatureWrapper
-from sb3_contrib import TQC
 from wandb.integration.sb3 import WandbCallback
 import wandb
 
@@ -21,12 +20,11 @@ if __name__ == "__main__":
         "goal_selection_strategy": 'future',
         "online_sampling": False,
         "max_episode_length": 400,
-        "her_k": 5
+        "her_k": 4
     }
 
     run = wandb.init(
         project="starship-landing",
-        entity="armandpl",
         config=config,
         sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
         monitor_gym=True,  # auto-upload the videos of agents playing the game
@@ -46,7 +44,7 @@ if __name__ == "__main__":
                            record_video_trigger=lambda x: x % 4000 == 0,
                            video_length=400)
 
-    model = TQC(
+    model = SAC(
         config["policy_type"],
         env,
         replay_buffer_class=HerReplayBuffer,
@@ -54,13 +52,14 @@ if __name__ == "__main__":
             n_sampled_goal=config["her_k"],
             goal_selection_strategy=config["goal_selection_strategy"],
             online_sampling=config["online_sampling"],
-            # max_episode_length=config["max_episode_length"],
+            max_episode_length=config["max_episode_length"],
+            handle_timeout_termination=False
         ),
-        buffer_size=int(1e6),
-        learning_rate=1e-3,
-        gamma=0.95, batch_size=1024, tau=0.05,
-        policy_kwargs=dict(net_arch=[512, 512, 512]),
-        tensorboard_log=f"runs/{run.id}"
+        # buffer_size=int(1e6),
+        # gamma=0.95, batch_size=1024, tau=0.05,
+        # policy_kwargs=dict(net_arch=[512, 512, 512]),
+        tensorboard_log=f"runs/{run.id}",
+        verbose=1
     )
 
     model.learn(
