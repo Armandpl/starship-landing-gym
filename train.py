@@ -1,4 +1,5 @@
 import gym
+import pyvirtualdisplay
 from stable_baselines3 import SAC, HerReplayBuffer
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecVideoRecorder
@@ -12,12 +13,13 @@ import starship_landing_gym   # noqa F420
 if __name__ == "__main__":
     config = {
         "policy_type": "MultiInputPolicy",
-        "total_timesteps": 1000000,
+        "total_timesteps": 5000000,
         "env_name": "StarshipLanding-v0",
         # Available strategies (cf paper): future, final, episode
-        "goal_selection_strategy": 'future',
+        "goal_selection_strategy": 'episode',
         "online_sampling": False,
-        "max_episode_length": 400
+        "max_episode_length": 400,
+        "batch_size": 256
     }
 
     run = wandb.init(
@@ -27,6 +29,8 @@ if __name__ == "__main__":
         monitor_gym=True,  # auto-upload the videos of agents playing the game
         save_code=True,  # optional
     )
+
+    pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
 
     def make_env():
         env = gym.make(config["env_name"])
@@ -43,9 +47,10 @@ if __name__ == "__main__":
         config["policy_type"],
         env,
         replay_buffer_class=HerReplayBuffer,
+        batch_size=config["batch_size"],
         # Parameters for HER
         replay_buffer_kwargs=dict(
-            n_sampled_goal=4,
+            n_sampled_goal=5,
             goal_selection_strategy=config["goal_selection_strategy"],
             online_sampling=config["online_sampling"],
             max_episode_length=config["max_episode_length"],
