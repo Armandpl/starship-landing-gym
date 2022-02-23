@@ -9,9 +9,7 @@ A Gym env for rocket landing.
 
 The task is the to bring the rocket above the landing pad with a speed inferior to 5m/s.  
 
-**wip**: describe observation, reward, wrapper, her
-
-This is inspired by and based on [Thomas Godden's "Starship Landing Trajectory Optimization" blog post.](http://thomasgodden.com/starship-trajopt.html)
+This is inspired by and based on Thomas Godden's ["Starship Landing Trajectory Optimization" blog post.](http://thomasgodden.com/starship-trajopt.html)
 
 ## Installation
 
@@ -32,3 +30,4 @@ while not done:
     env.render()
 ```
 
+todo: describe observation, reward, need for history wrapper, need for her
