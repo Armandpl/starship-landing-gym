@@ -1,4 +1,5 @@
 import ast
+import os
 import random
 from pathlib import Path
 
@@ -112,21 +113,29 @@ def check_config(config):
     if config["use_her"] is False:
         assert config["her_k"] is config["goal_selection_strategy"] is None
 
+    # TODO check reward scales are floats? or cash them to float?
+
 
 def upload_file_to_artifacts(pth, artifact_name, artifact_type):
     print(f"Saving {pth} to {artifact_name}")
     if not isinstance(pth, Path):
         pth = Path(pth)
 
+    assert os.path.isfile(pth), f"{pth} is not a file"
+
+    artifact = wandb.Artifact(artifact_name, type=artifact_type)
+    artifact.add_file(pth)
+    wandb.log_artifact(artifact)
+
 
 if __name__ == "__main__":
     config = {
         "model_class": SAC,
-        "total_timesteps": 500000,
+        "total_timesteps": 2000000,
         "env_name": "StarshipLanding-v0",
         "online_sampling": False,
         "max_episode_length": 500,
-        "batch_size": 1024,  # 16384,
+        "batch_size": 1024,
         "use_her": True,
         "her_k": 5,
         # Available strategies (cf paper): future, final, episode
@@ -138,13 +147,10 @@ if __name__ == "__main__":
         "augment_obs": False,
         "net_arch": "[512, 512, 512]",
         "reward_args": dict(
-            distance_penalty=False,
-            crash_penalty=True,
-            crash_scale=200,
-            success_reward=False,
-            success_scale=5,
-            step_penalty=True,
-            step_penalty_scale=0.5
+            distance_scale=-1/12.0,
+            crash_scale=-10.0,
+            success_scale=+0.0,
+            step_scale=-0.0,
         )
     }
 
