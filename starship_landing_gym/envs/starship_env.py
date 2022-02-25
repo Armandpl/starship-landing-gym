@@ -21,13 +21,10 @@ class StarshipEnv(gym.GoalEnv):
                  random_goal=True, random_init_state=True,
                  augment_obs=True,
                  reward_args=dict(
-                    distance_penalty=True,
-                    crash_penalty=True,
-                    crash_scale=5,
-                    success_reward=False,
-                    success_scale=5,
-                    step_penalty=True,
-                    step_penalty_scale=0.3
+                    distance_scale=-1/12.0,
+                    crash_scale=-10.0,
+                    success_scale=+0.0,
+                    step_scale=-0.0,
                  )):
 
         self.dt = dt
@@ -112,27 +109,28 @@ class StarshipEnv(gym.GoalEnv):
              for g
              in a_goal])
 
-        if rwd_args["distance_penalty"]:
-            reward_w = np.array([1, 0, 1, 0, 1, 0, 0])
-            d_penalty = np.power(
-                np.dot(np.abs(achieved_goal - desired_goal), reward_w),
-                0.5)
+        # Distance Penalty
+        reward_w = np.array([1, 0, 1, 0, 1, 0, 0])
+        distance = np.power(
+            np.dot(np.abs(achieved_goal - desired_goal), reward_w),
+            0.5)
 
-            reward -= d_penalty
+        reward += distance * rwd_args["distance_scale"]
 
-        if rwd_args["crash_penalty"]:
-            # only penalize crash if not success
-            reward -= crashed * rwd_args["crash_scale"] * not_success
+        # Crash Penalty
+        # only penalize crash if not success
+        if rwd_args["crash_scale"] != 0.0:
+            reward += crashed * rwd_args["crash_scale"] * not_success
 
-        if rwd_args["success_reward"]:
-            reward += rwd_args["success_reward"] * is_success
+        # Success Reward
+        reward += rwd_args["success_scale"] * is_success
 
-        if rwd_args["step_penalty"]:
-            reward -= rwd_args["step_penalty_scale"] * not_success
+        # Step Penalty: substract a fixed number at each step
+        reward += rwd_args["step_scale"] * not_success
 
         # if only one reward. only needed for crash computation
         if achieved_goal.shape[0] == achieved_goal.shape[-1] \
-                and rwd_args["crash_penalty"]:
+                and rwd_args["crash_scale"] != 0.0:
 
             reward = reward[0]
 
