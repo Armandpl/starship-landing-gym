@@ -19,7 +19,7 @@ class StarshipEnv(gym.GoalEnv):
 
     def __init__(self, dt=0.04, drop_h=1000, width=400,
                  random_goal=True, random_init_state=True,
-                 augment_obs=True,
+                 augment_obs=True, random_constants=False,
                  reward_args=dict(
                     distance_scale=-1/120,
                     distance_weights=[1, 0, 1, 0, 1, 0, 0],
@@ -34,6 +34,7 @@ class StarshipEnv(gym.GoalEnv):
         self.random_goal = random_goal
         self.random_init_state = random_init_state
         self.augment_obs = augment_obs
+        self.random_constants = random_constants
         self.reward_args = reward_args
 
         self.dyn = StarshipDynamics()
@@ -52,6 +53,14 @@ class StarshipEnv(gym.GoalEnv):
         self.min_goal = np.array([-self.width, -200, 0, -200,
                                   -1, -1, -20*np.pi*2])
         norm_min_goal = self._normalize_obs(self.min_goal)
+
+        # create a state space to sample random init state
+        max_init_space = np.array([self.width/2, 100, self.drop_h,
+                                   -60, np.pi*2, np.pi/5])
+        min_init_space = np.array([-self.width/2, -100, self.drop_h-300,
+                                   -80, -np.pi*2, -np.pi/5])
+
+        self.state_space = spaces.Box(low=min_init_space, high=max_init_space)
 
         if self.augment_obs:
             # TODO put the right values for the maximum distance.
@@ -105,10 +114,7 @@ class StarshipEnv(gym.GoalEnv):
         else:
             a_goal = achieved_goal
 
-        crashed = np.array(
-            [not self.observation_space["achieved_goal"].contains(g)
-             for g
-             in a_goal])
+        crashed = np.array([self._crashed(g) for g in a_goal])
 
         reward_w = np.array(rwd_args["distance_weights"])
         # Distance Penalty
@@ -137,6 +143,13 @@ class StarshipEnv(gym.GoalEnv):
 
         return reward
 
+    def _crashed(self, obs):
+        x, _, y, _, cos_th, _, _ = obs*self.max_goal  # de-normalize
+        touching_ground = (y - cos_th*self.dyn.length/2) <= 0
+        out_of_scope = abs(x) > self.width
+
+        return bool(touching_ground or out_of_scope)
+
     def step(self, a):
         a = self._norm_thrust(a)
         self._state = self._update_state(a)
@@ -163,12 +176,7 @@ class StarshipEnv(gym.GoalEnv):
         rwd = self.compute_reward(obs["achieved_goal"],
                                   obs["desired_goal"], info)
 
-        x, _, y, _, th, _ = self._state
-        touching_ground = (y - np.cos(th)*self.dyn.length/2) <= 0
-        out_of_scope = abs(x) > self.width
-        crashed = bool(touching_ground or out_of_scope)
-
-        done = info["is_success"] or crashed
+        done = info["is_success"] or self._crashed(curr_obs)
 
         return obs, rwd, done, info
 
@@ -186,17 +194,14 @@ class StarshipEnv(gym.GoalEnv):
         return self._normalize_obs(obs)
 
     def _init_state(self, random=True):
-        max_x = self.width/2
-        min_x = -max_x
-
         self._state = np.array([
-            np.random.randint(min_x, max_x) if random else 0,  # start x pos
+            0,  # start x pos
             0,  # start x speed
             self.drop_h,  # start y pos
             -80,  # start y speed
-            np.random.rand()*np.pi*2 if random else -np.pi/2,  # start theta
+            -np.pi/2,  # start theta
             0,  # start theta speeed
-        ])
+        ]) if not random else self.state_space.sample()
 
     def _init_goal(self, random=True):
         max_x = self.width/2
@@ -212,8 +217,7 @@ class StarshipEnv(gym.GoalEnv):
             0
         ])
         self.goal = self._normalize_obs(goal)
-        if self.renderer is not None:
-            self.renderer.update_goal(goal)
+        self.raw_goal = goal
 
     def _update_state(self, a):
         x_dotdot, y_dotdot, theta_dotdot = \
@@ -233,25 +237,50 @@ class StarshipEnv(gym.GoalEnv):
 
     def render(self, mode="rgb_array"):
         if self.renderer is None:
-            self.renderer = StarshipRenderer(self.dyn, self.width*2,
-                                             self.drop_h, self.tolerances)
+            self.renderer = StarshipRenderer(self.width*2, self.drop_h)
+            self.renderer.reset(self.dyn, self.tolerances, self.raw_goal)
         return self.renderer.render(return_rgb_array=mode == "rgb_array")
 
     def reset(self):
         self._init_state(self.random_init_state)
         self._init_goal(self.random_goal)
+        self.dyn._init_constants(self.random_constants)
+        if self.renderer is not None:
+            self.renderer.reset(self.dyn, self.tolerances, self.raw_goal)
         obs, _, _, _ = self.step(np.zeros_like(self.action_space.low))
         return obs
 
 
 class StarshipDynamics:
     def __init__(self):
+        self._init_constants()
+
+    def _random_variation(self, variable, pct_variation):
+        """
+        Returns a random % of variable between
+        -pct_variation/2 and +pct_variation/2
+        """
+
+        return variable * (np.random.rand() * 2 - 1) * pct_variation/2
+
+    def _init_constants(self, randomize=False):
         self.g = 9.8
+        self.g += self._random_variation(self.g, pct_variation=0.2) * randomize
+
         self.m = 100000  # kg
+        self.m += self._random_variation(self.m, pct_variation=0.2) * randomize
+
         self.max_thrust = 1 * 2210 * 1000  # kN
+        self.max_thrust += self._random_variation(
+            self.max_thrust, pct_variation=0.1) * randomize
 
         self.length = 50  # m
+        self.length += self._random_variation(
+            self.length, pct_variation=0.1) * randomize
+
         self.width = 10
+        self.width += self._random_variation(
+            self.width, pct_variation=0.1) * randomize
 
         # Inertia for a uniform density rod
         self.inertia = (1/12) * self.m * self.length**2
@@ -285,26 +314,31 @@ class StarshipDynamics:
 
 class StarshipRenderer:
 
-    def __init__(self, dyn, width, height, tolerances):
+    def __init__(self, width, height):
         # import fails if no screen so need to import here
         from gym.envs.classic_control import rendering
 
-        self.dyn = dyn
         self.width = width
         self.height = height
         self.rendering = rendering
+        self.viewer = None
 
-        self.viewer = rendering.Viewer(width, height)
+    def reset(self, dyn, tolerances, raw_goal):
+        if self.viewer is not None:
+            self.close()
+        self.dyn = dyn
+        self.viewer = self.rendering.Viewer(self.width, self.height)
         self.transforms = {
-            "ship": rendering.Transform(),
-            "flame": rendering.Transform(translation=(0, 0)),
-            "pad": rendering.Transform(),
+            "ship": self.rendering.Transform(),
+            "flame": self.rendering.Transform(translation=(0, 0)),
+            "pad": self.rendering.Transform(),
         }
 
         x_tolerance, _, _, _, _, _, _ = tolerances
         self._init_pad(x_tolerance, 10)
         self._init_flame(5, 15)
         self._init_ship(dyn.width, dyn.length)
+        self._update_goal(raw_goal)
 
     def _make_rectangle(self, width, height):
         lef, rig, top, bot = (
@@ -349,7 +383,7 @@ class StarshipRenderer:
         self.transforms["flame"].set_translation(0, self.dyn.length/2)
         self.transforms["flame"].set_scale(1, thrust)
 
-    def update_goal(self, goal):
+    def _update_goal(self, goal):
         goal_x, _, _, _, _, _, _ = goal
         self.transforms["pad"].set_translation(goal_x+self.width/2, 0)
 
