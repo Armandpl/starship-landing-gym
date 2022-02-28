@@ -21,8 +21,9 @@ class StarshipEnv(gym.GoalEnv):
                  random_goal=True, random_init_state=True,
                  augment_obs=True,
                  reward_args=dict(
-                    distance_scale=-1/12.0,
-                    crash_scale=-10.0,
+                    distance_scale=-1/120,
+                    distance_weights=[1, 0, 1, 0, 1, 0, 0],
+                    crash_scale=-1.0,
                     success_scale=+0.0,
                     step_scale=-0.0,
                  )):
@@ -109,8 +110,8 @@ class StarshipEnv(gym.GoalEnv):
              for g
              in a_goal])
 
+        reward_w = np.array(rwd_args["distance_weights"])
         # Distance Penalty
-        reward_w = np.array([1, 0, 1, 0, 1, 0, 0])
         distance = np.power(
             np.dot(np.abs(achieved_goal - desired_goal), reward_w),
             0.5)
