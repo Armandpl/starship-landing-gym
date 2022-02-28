@@ -145,7 +145,7 @@ class StarshipEnv(gym.GoalEnv):
 
     def _crashed(self, obs):
         x, _, y, _, cos_th, _, _ = obs*self.max_goal  # de-normalize
-        touching_ground = (y - cos_th*self.dyn.length/2) <= 0
+        touching_ground = (y - abs(cos_th)*self.dyn.length/2) <= 0
         out_of_scope = abs(x) > self.width
 
         return bool(touching_ground or out_of_scope)
