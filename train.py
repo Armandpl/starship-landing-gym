@@ -56,7 +56,7 @@ def main(config):
     env = VecVideoRecorder(
         env,
         f"videos/{run.id}",
-        record_video_trigger=lambda x: x % 4000 == 0,
+        record_video_trigger=lambda x: x % 20000 == 0,
         video_length=config["max_episode_length"],
     )
 
@@ -131,7 +131,7 @@ def upload_file_to_artifacts(pth, artifact_name, artifact_type):
 if __name__ == "__main__":
     config = {
         "model_class": SAC,
-        "total_timesteps": 2000000,
+        "total_timesteps": 600000,
         "env_name": "StarshipLanding-v0",
         "online_sampling": False,
         "max_episode_length": 500,
@@ -140,17 +140,18 @@ if __name__ == "__main__":
         "her_k": 5,
         # Available strategies (cf paper): future, final, episode
         "goal_selection_strategy": "future",
-        "history": 10,
+        "history": 2,
         "seed": 1,
         "random_goal": True,
         "random_init_state": True,
         "augment_obs": False,
-        "net_arch": "[512, 512, 512]",
+        "net_arch": "[256, 256, 256]",
         "reward_args": dict(
-            distance_scale=-1/12.0,
-            crash_scale=-10.0,
+            distance_scale=-1/120.0,
+            distance_weights=[0.5, 0.5, 0.5, 0.5, 0.5, 0, 0.5],
+            crash_scale=-1.0,
             success_scale=+0.0,
-            step_scale=-0.0,
+            step_scale=0.0,
         )
     }
 
