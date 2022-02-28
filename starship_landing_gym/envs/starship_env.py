@@ -163,8 +163,10 @@ class StarshipEnv(gym.GoalEnv):
         rwd = self.compute_reward(obs["achieved_goal"],
                                   obs["desired_goal"], info)
 
-        crashed = not self.observation_space["achieved_goal"]\
-            .contains(curr_obs)
+        x, _, y, _, th, _ = self._state
+        touching_ground = (y - np.cos(th)*self.dyn.length/2) <= 0
+        out_of_scope = abs(x) > self.width
+        crashed = bool(touching_ground or out_of_scope)
 
         done = info["is_success"] or crashed
 
