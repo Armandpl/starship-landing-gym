@@ -19,7 +19,7 @@ class StarshipEnv(gym.GoalEnv):
 
     def __init__(self, dt=0.04, drop_h=1000, width=400,
                  random_goal=True, random_init_state=True,
-                 augment_obs=True, random_constants=False,
+                 augment_obs=False, random_constants=False,
                  reward_args=dict(
                     distance_scale=-1/120,
                     distance_weights=[1, 0, 1, 0, 1, 0, 0],
