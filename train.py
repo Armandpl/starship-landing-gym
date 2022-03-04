@@ -12,6 +12,7 @@ from stable_baselines3 import SAC, TD3, HerReplayBuffer  # noqa F420
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecVideoRecorder
+from stable_baselines3.common.callbacks import EvalCallback, CallbackList
 from wandb.integration.sb3 import WandbCallback
 
 import starship_landing_gym  # noqa F420
@@ -32,11 +33,13 @@ def main(config):
 
     pyvirtualdisplay.Display(visible=0, size=(1400, 900)).start()
 
-    def make_env():
-        env = gym.make(config["env_name"], reward_args=config["reward_args"],
-                       random_goal=config["random_goal"],
-                       random_init_state=config["random_init_state"],
-                       augment_obs=config["augment_obs"])
+    def make_env(evaluation=False):
+        env = gym.make(
+            config["env_name"], reward_args=config["reward_args"],
+            random_goal=config["random_goal"] and not evaluation,
+            random_init_state=config["random_init_state"] and not evaluation,
+            random_constants=config["random_constants"] and not evaluation,
+            augment_obs=config["augment_obs"])
 
         check_env(env)
         env = TimeLimit(env, config["max_episode_length"])
@@ -53,6 +56,7 @@ def main(config):
         return env
 
     env = DummyVecEnv([make_env])
+    eval_env = DummyVecEnv([lambda: make_env(True)])
     env = VecVideoRecorder(
         env,
         f"videos/{run.id}",
@@ -76,14 +80,20 @@ def main(config):
         tensorboard_log=f"runs/{run.id}",
         verbose=1,
     )
+    wb_callback = WandbCallback(
+        gradient_save_freq=100,
+        verbose=2
+    )
 
+    eval_callback = EvalCallback(eval_env, best_model_save_path=None,
+                                 log_path=None, eval_freq=5000,
+                                 deterministic=True, render=False)
+
+    callback = CallbackList([wb_callback, eval_callback])
     try:
         model.learn(
             total_timesteps=config["total_timesteps"],
-            callback=WandbCallback(
-                gradient_save_freq=100,
-                verbose=2
-            )
+            callback=callback
         )
     except KeyboardInterrupt:
         print("Interrupting training.")
@@ -131,27 +141,28 @@ def upload_file_to_artifacts(pth, artifact_name, artifact_type):
 if __name__ == "__main__":
     config = {
         "model_class": SAC,
-        "total_timesteps": 600000,
+        "total_timesteps": 8000000,
         "env_name": "StarshipLanding-v0",
         "online_sampling": False,
-        "max_episode_length": 500,
+        "max_episode_length": 1000,
         "batch_size": 1024,
         "use_her": True,
-        "her_k": 5,
+        "her_k": 4,
         # Available strategies (cf paper): future, final, episode
         "goal_selection_strategy": "future",
         "history": 2,
         "seed": 1,
         "random_goal": True,
         "random_init_state": True,
+        "random_constants": True,
         "augment_obs": False,
-        "net_arch": "[256, 256, 256]",
+        "net_arch": "[512, 512, 512]",
         "reward_args": dict(
-            distance_scale=-1/120.0,
-            distance_weights=[0.5, 0.5, 0.5, 0.5, 0.5, 0, 0.5],
+            distance_scale=0.0,
+            distance_weights=[1, 0, 1, 0, 1, 0, 0],
             crash_scale=-1.0,
-            success_scale=+0.0,
-            step_scale=0.0,
+            success_scale=+1.0,
+            step_scale=-0.03,
         )
     }
 
