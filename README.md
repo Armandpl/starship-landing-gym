@@ -7,7 +7,7 @@ A Gym env for propulsive rocket landing.
   <i> Successfull Rocket Landing </i>
 </p>
 
-The task is the to bring the rocket above the landing pad with a speed inferior to 5m/s.  
+The goal is to bring the rocket above the landing pad with a speed inferior to 5m/s.  
 
 This is inspired by and based on Thomas Godden's ["Starship Landing Trajectory Optimization" blog post.](http://thomasgodden.com/starship-trajopt.html)
 
