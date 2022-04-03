@@ -1,5 +1,5 @@
 # Starship Landing Gym [![tests](https://github.com/Armandpl/starship-landing-gym/actions/workflows/tests.yml/badge.svg)](https://github.com/Armandpl/starship-landing-gym/actions/workflows/tests.yml)
-A Gym env for rocket landing. 
+A Gym env for propulsive rocket landing. 
 
 <p align="center">
   <img width="400" height="500" src="https://raw.githubusercontent.com/Armandpl/starship-landing-gym/master/images/landing.gif">
