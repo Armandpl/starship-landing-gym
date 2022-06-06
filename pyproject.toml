@@ -1,9 +1,8 @@
 [tool.poetry]
 name = "starship-landing-gym"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Gym env for rocket landing."
 readme = "README.md"
-homepage = "https://github.com/Armandpl/starship-landing-gym"
 repository = "https://github.com/Armandpl/starship-landing-gym"
 authors = ["Armandpl <adpl33@gmail.com>"]
 
