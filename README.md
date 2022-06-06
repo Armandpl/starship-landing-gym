@@ -30,4 +30,8 @@ while not done:
     env.render()
 ```
 
-todo: describe observation, reward, need for history wrapper, need for her
+## Obvervations and Actions
+
+<p align="center">
+  <img width="1280" height="720" src="https://raw.githubusercontent.com/Armandpl/starship-landing-gym/master/images/env_description.jpg">
+</p>
