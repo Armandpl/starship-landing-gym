@@ -29,9 +29,3 @@ while not done:
     obs, reward, done, info = env.step(action)
     env.render()
 ```
-
-## Obvervations and Actions
-
-<p align="center">
-  <img width="1280" height="720" src="https://raw.githubusercontent.com/Armandpl/starship-landing-gym/master/images/env_description.jpg">
-</p>
