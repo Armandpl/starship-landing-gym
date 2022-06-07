@@ -26,6 +26,7 @@ import starship_landing_gym
 env = gym.make("StarshipLanding-v0")
 
 done = False
+env.reset()
 while not done:
     action = ... # Your agent code here
     obs, reward, done, info = env.step(action)
